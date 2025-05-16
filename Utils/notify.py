@@ -31,3 +31,22 @@ def notify_asana_failure(task_gid: str, reason: str, rule: str) -> None:
         logger.info("✅ Slack notification sent successfully.")
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Failed to send Slack notification: {e}")
+
+
+def send_slack_notification(message: str) -> None:
+    """
+    Sends a Slack notification with the given message.
+
+    Args:
+        message (str): The message to send to Slack.
+    """
+    payload = {
+        "Message": message
+    }
+
+    try:
+        response = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=10)
+        response.raise_for_status()
+        logger.info("✅ Slack notification sent successfully.")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"❌ Failed to send Slack notification: {e}")

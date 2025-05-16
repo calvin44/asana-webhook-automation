@@ -70,7 +70,7 @@ async def handle_asana_webhook(
 
         return {"status": "received"}
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         logger.exception(f"❌ Error processing webhook payload: {e}")
         return {"status": "error", "message": str(e)}
 

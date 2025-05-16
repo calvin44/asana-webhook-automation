@@ -16,6 +16,7 @@ def handle_pending_approval(events: List[Dict]) -> None:
     Process task events and update tasks with status 'Pending Approval'
     by setting due date and assignee based on 'Sales Owner' custom field.
     """
+
     # Group events by task GID so we can process each task individually
     events_by_task = group_events_by_task_gid(events)
 
@@ -106,7 +107,7 @@ def has_change_in_enum_option_field(events: List[Dict]) -> bool:
             )
             if new_value_gid and new_value_gid in enum_options:
                 return True
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"Error parsing event: {event} | Exception: {e}")
             continue
 
