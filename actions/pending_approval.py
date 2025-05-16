@@ -5,6 +5,7 @@ from asana import TasksApi, UsersApi
 from asana.rest import ApiException
 from loguru import logger
 
+from Utils.notify import notify_asana_failure
 from Utils.resources import WORKSPACE_GID
 from asana_utils.api import get_asana_client, get_enum_custom_fields
 from asana_utils.task import group_events_by_task_gid
@@ -15,49 +16,69 @@ def handle_pending_approval(events: List[Dict]) -> None:
     Process task events and update tasks with status 'Pending Approval'
     by setting due date and assignee based on 'Sales Owner' custom field.
     """
+    # Group events by task GID so we can process each task individually
     events_by_task = group_events_by_task_gid(events)
 
     for task_gid, task_events in events_by_task.items():
+        # Skip tasks that have no change-related events
         if not has_change_event(task_events):
             logger.info(f"No change event for task {task_gid}.")
             continue
 
+        # Skip tasks that did not change the specific enum option (e.g., status field)
         if not has_change_in_enum_option_field(task_events):
             logger.info(f"No change in enum option for task {task_gid}.")
             continue
 
+        # Fetch latest task info from Asana
         task_info = get_task_info(task_gid)
         if not task_info:
             logger.error(f"Failed to fetch task info for task {task_gid}")
             continue
 
+        # Only proceed if the task status is 'Pending Approval'
         option = get_task_option(task_info)
         if option.get("name") != "Pending Approval":
             logger.info(
                 f"Task {task_gid} is not in 'Pending Approval' status.")
             continue
 
+        # Retrieve the 'Sales Owner' custom field from the task
         sales_owner_field = get_custom_field("Sales Owner", task_info)
         if not sales_owner_field:
             logger.error(f"'Sales Owner' field not found in task {task_gid}")
             continue
 
         logger.info(f"Sales owner field: {sales_owner_field}")
+
+        # Try to find the user info by the name in the 'Sales Owner' field
         sales_account_info = find_user_by_name(
             sales_owner_field.get("display_value"))
+
+        assigned_user_gid = None
         if not sales_account_info:
+            # If user not found, log warning and proceed with due date only
             logger.error(
                 f"Sales account info not found for '{sales_owner_field.get('display_value')}'")
-            continue
+            notify_asana_failure(
+                task_gid, f"Sales account info not found for '{sales_owner_field.get('display_value')}', unassign Task assignee", "Pending Approval")
+        else:
+            # If found, include assignee in the update payload
+            logger.info(f"Sales account info: {sales_account_info}")
+            assigned_user_gid = sales_account_info["gid"]
 
-        logger.info(f"Sales account info: {sales_account_info}")
-
+        # Prepare task update payload with due date set to two weeks from now
         update_data = {
             "due_on": get_due_date_two_weeks_from_now(),
-            "assignee": sales_account_info["gid"],
+            "assignee": assigned_user_gid
         }
 
+        # Define fields to include in the response (optional)
         opts = {"opt_fields": "assignee,due_on"}
+
+        logger.info(f"Updating task {task_gid} with data: {update_data}")
+
+        # Send update to Asana
         update_task(task_gid, update_data, opts)
 
 
