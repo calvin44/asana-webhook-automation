@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Environment variables
+.env
+.env.*
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# macOS system files
+.DS_Store
+
+# Logs
+*.log
+
+# pytest / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# FastAPI
+*.db
+instance/
+*.sqlite3
+
+# Uvicorn PID or other runtime files
+*.pid
+
+# Optional: OS-specific
+Thumbs.db

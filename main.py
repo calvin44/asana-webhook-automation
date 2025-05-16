@@ -1,0 +1,79 @@
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import BackgroundTasks, FastAPI, Request, Header, Response
+from loguru import logger
+
+from Utils.webhook import check_webhook_exists
+from actions.pending_approval import handle_pending_approval
+
+# Initialize FastAPI app with lifespan event
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """
+    Application startup and shutdown events.
+    Checks for Asana webhook existence on startup.
+    """
+    if not check_webhook_exists():
+        logger.warning("Webhook not found. Please create one...")
+    else:
+        logger.info("Webhook already exists in Asana.")
+    yield
+    logger.info("🛑 Application is shutting down...")
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/")
+async def root():
+    """
+    Health check endpoint.
+    """
+    return {"message": "Asana Webhook Server is running!"}
+
+
+@app.post("/asana-webhook")
+async def handle_asana_webhook(
+    request: Request,
+    x_hook_secret: str = Header(default=None),
+    background_tasks: BackgroundTasks = None,
+):
+    """
+    Handles Asana webhook POST request.
+
+    Args:
+        request (Request): Incoming request from Asana.
+        x_hook_secret (str): Secret header for webhook handshake.
+        background_tasks (BackgroundTasks): Background task handler.
+
+    Returns:
+        JSON response indicating processing result.
+    """
+    if x_hook_secret:
+        logger.info(f"🔐 Handshake secret received: {x_hook_secret}")
+        return Response(status_code=200, headers={"X-Hook-Secret": x_hook_secret})
+
+    try:
+        payload = await request.json()
+        logger.debug(f"📦 Webhook payload received: {payload}")
+
+        events = payload.get("events", [])
+        if not events:
+            logger.warning("Received webhook with no events.")
+            return {"status": "ignored", "reason": "No events in payload"}
+
+        # Rule 1: Handle "Pending Approval" logic
+        background_tasks.add_task(handle_pending_approval, events)
+
+        return {"status": "received"}
+
+    except Exception as e:
+        logger.exception(f"❌ Error processing webhook payload: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
