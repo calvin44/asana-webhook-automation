@@ -4,21 +4,25 @@ from typing import List, Dict, Optional
 from asana import TasksApi, UsersApi
 from asana.rest import ApiException
 from loguru import logger
+from rapidfuzz import fuzz
 
-from Utils.notify import notify_asana_failure
+from Utils.notify import notify_asana_failure, send_slack_notification
 from Utils.resources import WORKSPACE_GID
 from asana_utils.api import get_asana_client, get_enum_custom_fields
-from asana_utils.task import group_events_by_task_gid
+from asana_utils.custom_option import get_custom_field, get_task_option
+from asana_utils.event import has_change_event
+from asana_utils.task import get_task_info
 
 
-def handle_pending_approval(events: List[Dict]) -> None:
+def handle_pending_approval(events_by_task: List[Dict]) -> None:
     """
     Process task events and update tasks with status 'Pending Approval'
     by setting due date and assignee based on 'Sales Owner' custom field.
     """
-
-    # Group events by task GID so we can process each task individually
-    events_by_task = group_events_by_task_gid(events)
+    # return if there is no event to process
+    if not events_by_task:
+        logger.info("No events to process.")
+        return
 
     for task_gid, task_events in events_by_task.items():
         # Skip tasks that have no change-related events
@@ -39,10 +43,14 @@ def handle_pending_approval(events: List[Dict]) -> None:
 
         # Only proceed if the task status is 'Pending Approval'
         option = get_task_option(task_info)
-        if option.get("name") != "Pending Approval":
+        if option["name"] != "Pending Approval":
             logger.info(
                 f"Task {task_gid} is not in 'Pending Approval' status.")
             continue
+
+        # Send notification on rule starting
+        send_slack_notification(
+            ":mailbox_with_mail: *Pending Approval Rule* rule started")
 
         # Retrieve the 'Sales Owner' custom field from the task
         sales_owner_field = get_custom_field("Sales Owner", task_info)
@@ -114,66 +122,6 @@ def has_change_in_enum_option_field(events: List[Dict]) -> bool:
     return False
 
 
-def has_change_event(events: List[Dict]) -> bool:
-    """
-    Check if any event in the list has action 'changed'.
-
-    Returns:
-        True if a change event is present, else False.
-    """
-    return any(event.get("action") == "changed" for event in events)
-
-
-def get_task_info(task_gid: str) -> Optional[Dict]:
-    """
-    Retrieve task information from Asana API.
-
-    Args:
-        task_gid: The GID of the task.
-
-    Returns:
-        Task information dictionary if successful, else None.
-    """
-    task_api = TasksApi(get_asana_client())
-    opts = {"opt_fields": "custom_type_status_option,custom_fields.name,custom_fields.display_value"}
-
-    try:
-        return task_api.get_task(task_gid, opts)
-    except ApiException as e:
-        logger.error(f"Error fetching task {task_gid}: {e}")
-        return None
-
-
-def get_task_option(task_info: Dict) -> Dict:
-    """
-    Extract the 'custom_type_status_option' from task info.
-
-    Args:
-        task_info: The task information dictionary.
-
-    Returns:
-        Dictionary representing the status option or empty dict.
-    """
-    return task_info.get("custom_type_status_option", {})
-
-
-def get_custom_field(field_name: str, task_info: Dict) -> Optional[Dict]:
-    """
-    Find a custom field by name in the task info.
-
-    Args:
-        field_name: Name of the custom field.
-        task_info: Task information dictionary.
-
-    Returns:
-        The custom field dictionary if found, else None.
-    """
-    for field in task_info.get("custom_fields", []):
-        if field.get("name") == field_name:
-            return field
-    return None
-
-
 def update_task(task_gid: str, update_data: Dict, opts: Dict) -> None:
     """
     Update the task with provided data.
@@ -223,9 +171,20 @@ def find_user_by_name(name: Optional[str]) -> Optional[Dict]:
 
     try:
         users = list(user_api.get_users(opts))
+        best_match = None
+        highest_score = 0
         for user in users:
-            if user.get("name") == name:
-                return user
+            score = fuzz.token_set_ratio(name, user["name"])
+            if score > highest_score:
+                highest_score = score
+                best_match = user
+
+        if highest_score >= 70:
+            logger.info(
+                f"Best fuzzy match for '{name}' is '{best_match['name']}' with score {highest_score}")
+            return best_match
+        logger.warning(
+            f"No sufficiently close match found for '{name}'. Highest score: {highest_score}")
         return None
     except ApiException as e:
         logger.error(f"Error fetching users: {e}")

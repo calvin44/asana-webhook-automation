@@ -6,6 +6,8 @@ from loguru import logger
 
 from Utils.webhook import check_webhook_exists
 from actions.pending_approval import handle_pending_approval
+from actions.requirement_collection import handle_requirement_collection
+from asana_utils.task import group_events_by_task_gid
 
 # Initialize FastAPI app with lifespan event
 
@@ -65,8 +67,21 @@ async def handle_asana_webhook(
             logger.warning("Received webhook with no events.")
             return {"status": "ignored", "reason": "No events in payload"}
 
+        # Group events by task GID so we can process each task individually
+        events_by_task = group_events_by_task_gid(events)
+        logger.info(
+            f"Grouped events by task GID: {events_by_task}")
+
         # Rule 1: Handle "Pending Approval" logic
-        background_tasks.add_task(handle_pending_approval, events)
+        # background_tasks.add_task(
+        #     handle_pending_approval, events_by_task["changed"])
+
+        # Rule 2: Handle "Requirement Collection should come from form"
+        background_tasks.add_task(
+            handle_requirement_collection, events_by_task["added"])
+
+        logger.info(
+            "Processed events: complete")
 
         return {"status": "received"}
 
