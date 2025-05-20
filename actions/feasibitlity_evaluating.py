@@ -19,7 +19,8 @@ def handle_requirement_clarifying(events_by_task: List[Dict]) -> None:
 
     # return if there is no event to process
     if not events_by_task:
-        logger.info("No events to process.")
+        logger.info(
+            "[Feasibility Evaluating] ➡️ No events to process.")
         return
 
     for task_gid, task_events in events_by_task.items():
@@ -89,7 +90,7 @@ def handle_assignee_change(task_gid: str, assignee_events: List[Dict]) -> None:
         task_comments = get_task_comments(task_gid)
         attachments = get_task_attachments(task_gid)
         logger.debug(f"task comment extracted: {task_comments}")
-        if not task_comments and not attachments:
+        if not task_comments or not attachments:
             logger.info(f"No task comment found in the task {task_gid}")
             continue
 
@@ -100,5 +101,5 @@ def handle_assignee_change(task_gid: str, assignee_events: List[Dict]) -> None:
         update_data = {
             "custom_type_status_option": feasibility_evaluating_gid
         }
-        update_task(task_gid, update_data, {})
+        update_task(task_gid, update_data)
         logger.debug(f"option gid: {feasibility_evaluating_gid}")

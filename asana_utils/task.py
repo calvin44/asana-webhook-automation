@@ -20,7 +20,8 @@ def group_events_by_task_gid(events: List[Dict]) -> Dict[str, Dict[str, List[Dic
     """
     grouped_events: Dict[str, Dict[str, List[Dict]]] = {
         "changed": defaultdict(list),
-        "added": defaultdict(list)
+        "added": defaultdict(list),
+        "undeleted": defaultdict(list)
     }
 
     for event in events:
@@ -30,28 +31,30 @@ def group_events_by_task_gid(events: List[Dict]) -> Dict[str, Dict[str, List[Dic
         if resource.get("resource_type") != "task":
             continue
 
+        resource_gid = resource.get("gid")
         match action:
             case "changed":
-                task_gid = resource.get("gid")
-                if task_gid:
-                    grouped_events["changed"][task_gid].append(event)
+                if resource_gid:
+                    grouped_events["changed"][resource_gid].append(event)
                 else:
                     logger.warning(
                         f"Missing 'gid' in 'changed' event: {event}")
 
             case "added":
-                gid = resource.get("gid")
+                gid = resource_gid
                 if resource["resource_type"] == "task" and event["parent"]["resource_type"] == "task":
                     gid = event.get("parent", {}).get("gid")
                 grouped_events["added"][gid].append(event)
-
+            case "undeleted":
+                grouped_events["undeleted"][resource_gid].append(event)
             case _:
                 logger.warning(
                     f"Unhandled event action: {action}, event: {event}")
 
     return {
         "changed": dict(grouped_events["changed"]),
-        "added": dict(grouped_events["added"])
+        "added": dict(grouped_events["added"]),
+        "undeleted": dict(grouped_events["undeleted"])
     }
 
 
@@ -72,6 +75,7 @@ def get_task_info(task_gid: str) -> Optional[Dict]:
         "custom_fields.name",
         "custom_fields.display_value",
         "notes",
+        "name"
     ]
 
     opts = {"opt_fields": ",".join(fields)}
@@ -122,7 +126,7 @@ def delete_task(task_gid: str) -> None:
         logger.error(f"Error deleting task {task_gid}: {e}")
 
 
-def update_task(task_gid: str, update_data: Dict, opts: Dict) -> None:
+def update_task(task_gid: str, update_data: Dict, opts: Dict = {}) -> None:  # pylint: disable=dangerous-default-value
     """
     Update the task with provided data.
 

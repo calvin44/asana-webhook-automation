@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import BackgroundTasks, FastAPI, Request, Header, Response
 from loguru import logger
 
+from actions.force_delete import force_delete_undeleted
 from utils.webhook import check_webhook_exists
 from actions.feasibitlity_evaluating import handle_requirement_clarifying
 from actions.pending_approval import handle_pending_approval
@@ -72,6 +73,10 @@ async def handle_asana_webhook(
         events_by_task = group_events_by_task_gid(events)
         logger.info(
             f"Grouped events by task GID: {events_by_task}")
+
+        # Rule 0: Force delete undeleted items when title matched
+        background_tasks.add_task(
+            force_delete_undeleted, events_by_task["undeleted"])
 
         # Rule 1: Handle "Pending Approval"
         # When option is set to "Pending Approval"

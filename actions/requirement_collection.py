@@ -5,7 +5,7 @@ from utils.notify import send_slack_notification
 
 from asana_utils.custom_option import get_task_option
 from asana_utils.event import has_add_event
-from asana_utils.task import delete_task, get_task_attachments, get_task_info
+from asana_utils.task import delete_task, get_task_attachments, get_task_info, update_task
 
 
 def handle_requirement_collection(events_by_task: List[Dict]):
@@ -14,7 +14,8 @@ def handle_requirement_collection(events_by_task: List[Dict]):
     """
     # return if there is no event to process
     if not events_by_task:
-        logger.info("No events to process.")
+        logger.info(
+            "[Handle Requirement Collection] ➡️ No events to process.")
         return
 
     for task_gid, task_events in events_by_task.items():
@@ -57,7 +58,13 @@ def handle_requirement_collection(events_by_task: List[Dict]):
 
         # Send notification on rule starting
         send_slack_notification(
-            ":mailbox_with_mail: *Requirement Clarifying* rule started")
+            ":mailbox_with_ma il: *Requirement Clarifying* rule started")
+
+        # Update task title to [Asana Rule Deleted Item]
+        update_data = {"name": "[Asana Rule Deleted Item]"}
+        update_task(task_gid, update_data)
+        logger.info(
+            f"Update task {task_gid} namet [Asana Rule Deleted Item] to handle undelete")
 
         # Delete the task
         delete_task(task_gid)

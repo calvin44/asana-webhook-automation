@@ -23,7 +23,8 @@ def handle_pending_approval(events_by_task: List[Dict]) -> None:
     """
     # return if there is no event to process
     if not events_by_task:
-        logger.info("No events to process.")
+        logger.info(
+            "[Handle Pending Approval] ➡️ No events to process.")
         return
 
     for task_gid, task_events in events_by_task.items():
