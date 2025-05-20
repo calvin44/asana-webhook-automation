@@ -1,6 +1,8 @@
 from typing import Dict, List
 from loguru import logger
-from Utils.notify import send_slack_notification
+
+from utils.notify import send_slack_notification
+
 from asana_utils.custom_option import get_task_option
 from asana_utils.event import has_add_event
 from asana_utils.task import delete_task, get_task_attachments, get_task_info

@@ -1,6 +1,6 @@
 from collections import defaultdict
 from typing import Dict, List, Optional
-from asana import TasksApi, AttachmentsApi
+from asana import TasksApi, AttachmentsApi, StoriesApi
 
 from asana.rest import ApiException
 from loguru import logger
@@ -120,3 +120,46 @@ def delete_task(task_gid: str) -> None:
         logger.info(f"Task {task_gid} deleted successfully.")
     except ApiException as e:
         logger.error(f"Error deleting task {task_gid}: {e}")
+
+
+def update_task(task_gid: str, update_data: Dict, opts: Dict) -> None:
+    """
+    Update the task with provided data.
+
+    Args:
+        task_gid: The GID of the task to update.
+        update_data: Dictionary of fields to update.
+        opts: Additional options for the API call.
+    """
+    task_api = TasksApi(get_asana_client())
+    body = {"data": update_data}
+
+    try:
+        response = task_api.update_task(body, task_gid, opts)
+        logger.info(f"Task {task_gid} updated successfully: {response}")
+    except ApiException as e:
+        logger.error(f"Error updating task {task_gid}: {e}")
+
+
+def get_task_comments(task_gid: str) -> List[Dict]:
+    """
+    Fetches all comment stories for a given Asana task.
+    """
+    stories_api = StoriesApi(get_asana_client())
+    opts = {"limit": 100}
+
+    try:
+        stories = list(stories_api.get_stories_for_task(task_gid, opts))
+        logger.debug(f"Fetched stories for task {task_gid}: {stories}")
+
+        # Only keep stories that are actual comments
+        comment_infos = [
+            story for story in stories
+            if story.get("type") == "comment"
+        ]
+
+        return comment_infos
+
+    except ApiException as e:
+        logger.error(f"Error fetching stories for task {task_gid}: {e}")
+        return []

@@ -1,17 +1,19 @@
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
-from asana import TasksApi, UsersApi
+from asana import UsersApi
 from asana.rest import ApiException
 from loguru import logger
 from rapidfuzz import fuzz
 
-from Utils.notify import notify_asana_failure, send_slack_notification
-from Utils.resources import WORKSPACE_GID
-from asana_utils.api import get_asana_client, get_enum_custom_fields
+from utils.resources import WORKSPACE_GID
+from utils.notify import asana_slack_notification, notify_asana_failure
+
+from asana_utils.api import get_asana_client
 from asana_utils.custom_option import get_custom_field, get_task_option
+from asana_utils.enum_option import get_enum_custom_fields_by_gid
 from asana_utils.event import has_change_event
-from asana_utils.task import get_task_info
+from asana_utils.task import get_task_info, update_task
 
 
 def handle_pending_approval(events_by_task: List[Dict]) -> None:
@@ -48,10 +50,6 @@ def handle_pending_approval(events_by_task: List[Dict]) -> None:
                 f"Task {task_gid} is not in 'Pending Approval' status.")
             continue
 
-        # Send notification on rule starting
-        send_slack_notification(
-            ":mailbox_with_mail: *Pending Approval Rule* rule started")
-
         # Retrieve the 'Sales Owner' custom field from the task
         sales_owner_field = get_custom_field("Sales Owner", task_info)
         if not sales_owner_field:
@@ -75,6 +73,12 @@ def handle_pending_approval(events_by_task: List[Dict]) -> None:
             # If found, include assignee in the update payload
             logger.info(f"Sales account info: {sales_account_info}")
             assigned_user_gid = sales_account_info["gid"]
+
+        asana_slack_notification(
+            task_gid,
+            "Option is set to \"Pending for Approval\"",
+            "When option is set top \"Pending for Approval\", set due date to 2 weeks from now and assignee to Sales"
+        )
 
         # Prepare task update payload with due date set to two weeks from now
         update_data = {
@@ -104,7 +108,7 @@ def has_change_in_enum_option_field(events: List[Dict]) -> bool:
     Returns:
         bool: True if any event includes a change to a known enum option, False otherwise.
     """
-    enum_options = get_enum_custom_fields()
+    enum_options = get_enum_custom_fields_by_gid()
     for event in events:
         try:
             new_value_gid = (
@@ -120,25 +124,6 @@ def has_change_in_enum_option_field(events: List[Dict]) -> bool:
             continue
 
     return False
-
-
-def update_task(task_gid: str, update_data: Dict, opts: Dict) -> None:
-    """
-    Update the task with provided data.
-
-    Args:
-        task_gid: The GID of the task to update.
-        update_data: Dictionary of fields to update.
-        opts: Additional options for the API call.
-    """
-    task_api = TasksApi(get_asana_client())
-    body = {"data": update_data}
-
-    try:
-        response = task_api.update_task(body, task_gid, opts)
-        logger.info(f"Task {task_gid} updated successfully: {response}")
-    except ApiException as e:
-        logger.error(f"Error updating task {task_gid}: {e}")
 
 
 def get_due_date_two_weeks_from_now() -> str:

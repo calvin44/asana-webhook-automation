@@ -4,7 +4,8 @@ import uvicorn
 from fastapi import BackgroundTasks, FastAPI, Request, Header, Response
 from loguru import logger
 
-from Utils.webhook import check_webhook_exists
+from utils.webhook import check_webhook_exists
+from actions.feasibitlity_evaluating import handle_requirement_clarifying
 from actions.pending_approval import handle_pending_approval
 from actions.requirement_collection import handle_requirement_collection
 from asana_utils.task import group_events_by_task_gid
@@ -72,13 +73,24 @@ async def handle_asana_webhook(
         logger.info(
             f"Grouped events by task GID: {events_by_task}")
 
-        # Rule 1: Handle "Pending Approval" logic
-        # background_tasks.add_task(
-        #     handle_pending_approval, events_by_task["changed"])
+        # Rule 1: Handle "Pending Approval"
+        # When option is set to "Pending Approval"
+        # 1. Set due date to 2 weeks from now
+        # 2. Set assignee to "Sales Owner"
+        background_tasks.add_task(
+            handle_pending_approval, events_by_task["changed"])
 
         # Rule 2: Handle "Requirement Collection should come from form"
+        # When a task is created:
+        # 1. Check "Decritption" and "Attachement". If they are empty, delete the task
         background_tasks.add_task(
             handle_requirement_collection, events_by_task["added"])
+
+        # Rule 3: When assignee set to PM (Lee/Lana), check if task has attachements or comments
+        # if yes: Update enum_option to  "Feasibility Evaluating"
+        # if no: do nothing / set to "Requirement Clarifying"
+        background_tasks.add_task(
+            handle_requirement_clarifying, events_by_task["changed"])
 
         logger.info(
             "Processed events: complete")

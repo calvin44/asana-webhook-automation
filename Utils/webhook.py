@@ -1,7 +1,7 @@
 
 from asana import WebhooksApi
 from asana.rest import ApiException
-from Utils.resources import PROJECT_GID, TARGET_URL, WORKSPACE_GID
+from utils.resources import PROJECT_GID, TARGET_URL, WORKSPACE_GID
 from asana_utils.api import get_asana_client
 
 
