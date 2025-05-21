@@ -11,7 +11,7 @@ from asana_utils.task import get_task_attachments, get_task_comments, update_tas
 from asana_utils.user import find_user_by_gid
 
 
-def handle_requirement_clarifying(events_by_task: List[Dict]) -> None:
+def handle_feasibility_evaluating(events_by_task: List[Dict]) -> None:
     """
     When assignee set to PM (Lee/Lana), check if task has attachments or comments.
     if yes: Update enum_option to "Feasibility Evaluating"

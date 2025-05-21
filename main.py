@@ -1,24 +1,80 @@
+"""
+Asana Webhook Processor
+
+A FastAPI application that handles Asana webhooks and processes task events.
+Includes background task processing for various Asana task states.
+"""
+
 from contextlib import asynccontextmanager
-
+from typing import Dict, List
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, Request, Header, Response
+from fastapi import BackgroundTasks, FastAPI, Request, Header, Response, Depends
 from loguru import logger
+from pydantic import BaseModel
 
-from actions.force_delete import force_delete_undeleted
-from utils.webhook import check_webhook_exists
-from actions.feasibitlity_evaluating import handle_requirement_clarifying
-from actions.pending_approval import handle_pending_approval
-from actions.requirement_collection import handle_requirement_collection
 from asana_utils.task import group_events_by_task_gid
+from utils.resources import ASANA_PAT
+from utils.webhook import check_webhook_exists
+from scoring_system.add_new_company import append_new_company
+from actions.feasibitlity_evaluating import handle_feasibility_evaluating
+from actions.force_delete import force_delete_undeleted
+from actions.pending_approval import handle_pending_approval
+from actions.requirement_clarifying import handle_requirement_clarifying
 
-# Initialize FastAPI app with lifespan event
+# ======================
+# Configuration
+# ======================
+
+
+class Settings:
+    """Application configuration settings."""
+    WEBHOOK_SECRET = ASANA_PAT  # Move to environment variables in production
+    PORT = 5000
+    RELOAD = True
+
+# ======================
+# Data Models
+# ======================
+
+
+class WebhookPayload(BaseModel):
+    """Pydantic model for validating Asana webhook payload."""
+    events: List[Dict]
+
+# ======================
+# Dependencies
+# ======================
+
+
+async def verify_webhook_secret(x_hook_secret: str = Header(default=None)):
+    """
+    Verify the webhook secret header.
+
+    Args:
+        x_hook_secret: The secret token from Asana webhook header
+
+    Returns:
+        Response: 403 if invalid, otherwise passes through
+    """
+    if x_hook_secret and x_hook_secret != Settings.WEBHOOK_SECRET:
+        logger.warning("Invalid webhook secret attempt")
+        return Response(status_code=403)
+    return x_hook_secret
+
+# ======================
+# FastAPI App
+# ======================
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """
-    Application startup and shutdown events.
-    Checks for Asana webhook existence on startup.
+    Manage FastAPI application lifecycle events.
+
+    On startup:
+    - Verifies Asana webhook exists
+    On shutdown:
+    - Logs shutdown message
     """
     if not check_webhook_exists():
         logger.warning("Webhook not found. Please create one...")
@@ -27,85 +83,83 @@ async def lifespan(_: FastAPI):
     yield
     logger.info("🛑 Application is shutting down...")
 
+app = FastAPI(
+    lifespan=lifespan,
+    title="Asana Webhook Processor",
+    description="Handles Asana webhooks and processes task events"
+)
 
-app = FastAPI(lifespan=lifespan)
+# ======================
+# Routes
+# ======================
 
 
 @app.get("/")
-async def root():
+async def health_check():
+    """Health check endpoint for service monitoring."""
+    return {"status": "running"}
+
+
+@app.get("/test")
+async def test_endpoint():
     """
-    Health check endpoint.
+    Temporary testing endpoint.
+
+    Note:
+        Remove this in production environments.
     """
-    return {"message": "Asana Webhook Server is running!"}
+    append_new_company("New Company")
+    return {"message": "Test completed"}
 
 
 @app.post("/asana-webhook")
-async def handle_asana_webhook(
+async def handle_webhook(
     request: Request,
-    x_hook_secret: str = Header(default=None),
-    background_tasks: BackgroundTasks = None,
+    background_tasks: BackgroundTasks,
+    x_hook_secret: str = Depends(verify_webhook_secret)
 ):
     """
-    Handles Asana webhook POST request.
+    Process incoming Asana webhook events.
 
     Args:
-        request (Request): Incoming request from Asana.
-        x_hook_secret (str): Secret header for webhook handshake.
-        background_tasks (BackgroundTasks): Background task handler.
+        request: The incoming request object
+        background_tasks: FastAPI background tasks handler
+        x_hook_secret: Webhook verification secret
 
     Returns:
-        JSON response indicating processing result.
+        dict: Processing status or error message
     """
+    # Webhook handshake
     if x_hook_secret:
-        logger.info(f"🔐 Handshake secret received: {x_hook_secret}")
-        return Response(status_code=200, headers={"X-Hook-Secret": x_hook_secret})
+        return Response(headers={"X-Hook-Secret": x_hook_secret})
 
     try:
-        payload = await request.json()
-        logger.debug(f"📦 Webhook payload received: {payload}")
+        payload = WebhookPayload.model_validate(await request.json())
+        events_by_task = group_events_by_task_gid(payload.events)
 
-        events = payload.get("events", [])
-        if not events:
-            logger.warning("Received webhook with no events.")
-            return {"status": "ignored", "reason": "No events in payload"}
-
-        # Group events by task GID so we can process each task individually
-        events_by_task = group_events_by_task_gid(events)
-        logger.info(
-            f"Grouped events by task GID: {events_by_task}")
-
-        # Rule 0: Force delete undeleted items when title matched
+        # Process events in background
+        background_tasks.add_task(
+            handle_pending_approval, events_by_task["changed"])
+        background_tasks.add_task(
+            handle_feasibility_evaluating, events_by_task["changed"])
+        background_tasks.add_task(
+            handle_requirement_clarifying, events_by_task["added"])
         background_tasks.add_task(
             force_delete_undeleted, events_by_task["undeleted"])
 
-        # Rule 1: Handle "Pending Approval"
-        # When option is set to "Pending Approval"
-        # 1. Set due date to 2 weeks from now
-        # 2. Set assignee to "Sales Owner"
-        background_tasks.add_task(
-            handle_pending_approval, events_by_task["changed"])
-
-        # Rule 2: Handle "Requirement Collection should come from form"
-        # When a task is created:
-        # 1. Check "Decritption" and "Attachement". If they are empty, delete the task
-        background_tasks.add_task(
-            handle_requirement_collection, events_by_task["added"])
-
-        # Rule 3: When assignee set to PM (Lee/Lana), check if task has attachements or comments
-        # if yes: Update enum_option to  "Feasibility Evaluating"
-        # if no: do nothing / set to "Requirement Clarifying"
-        background_tasks.add_task(
-            handle_requirement_clarifying, events_by_task["changed"])
-
-        logger.info(
-            "Processed events: complete")
-
-        return {"status": "received"}
+        return {"status": "processing_started"}
 
     except Exception as e:  # pylint: disable=broad-except
-        logger.exception(f"❌ Error processing webhook payload: {e}")
+        logger.exception(f"Webhook processing failed: {e}")
         return {"status": "error", "message": str(e)}
 
-
+# ======================
+# Main
+# ======================
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=Settings.PORT,
+        reload=Settings.RELOAD
+    )

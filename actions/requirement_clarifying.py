@@ -1,6 +1,8 @@
 from typing import Dict, List
 from loguru import logger
 
+
+from scoring_system.add_new_company import append_new_company
 from utils.notify import send_slack_notification
 
 from asana_utils.custom_option import get_task_option
@@ -8,7 +10,7 @@ from asana_utils.event import has_add_event
 from asana_utils.task import delete_task, get_task_attachments, get_task_info, update_task
 
 
-def handle_requirement_collection(events_by_task: List[Dict]):
+def handle_requirement_clarifying(events_by_task: List[Dict]):
     """
     Process task events and delete task if request does not contain 'Decription' or attachement.
     """
@@ -49,6 +51,8 @@ def handle_requirement_collection(events_by_task: List[Dict]):
 
         # check description and attachemnt to determine whether request comes from form
         if task_info["notes"] and attachments:
+            new_company_name = task_info["name"]
+            append_new_company(new_company_name)
             logger.info(
                 f"Task {task_gid} has a description and attachment. Confirmed request from form.")
             continue
