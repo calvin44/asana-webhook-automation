@@ -5,6 +5,7 @@ from asana import TasksApi, AttachmentsApi, StoriesApi
 from asana.rest import ApiException
 from loguru import logger
 from asana_utils.api import get_asana_client
+from utils.resources import PROJECT_GID
 
 
 def group_events_by_task_gid(events: List[Dict]) -> Dict[str, Dict[str, List[Dict]]]:
@@ -166,4 +167,19 @@ def get_task_comments(task_gid: str) -> List[Dict]:
 
     except ApiException as e:
         logger.error(f"Error fetching stories for task {task_gid}: {e}")
+        return []
+
+
+def get_task_from_project(project_gid: str = PROJECT_GID, opts: Dict = {}):  # pylint: disable=dangerous-default-value
+    """
+    Get a list of tasks under a project
+    """
+
+    try:
+        task_api = TasksApi(get_asana_client())
+        task_list = list(task_api.get_tasks_for_project(project_gid, opts))
+        return task_list
+
+    except ApiException as e:
+        logger.error(f"Error fetching task list: {e}")
         return []

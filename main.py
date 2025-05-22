@@ -10,12 +10,13 @@ from typing import Dict, List
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, Request, Header, Response, Depends
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from asana_utils.task import group_events_by_task_gid
 from utils.resources import ASANA_PAT
 from utils.webhook import check_webhook_exists
-from scoring_system.add_new_company import append_new_company
+
+from actions.update_business_value import update_business_value_from_scoring
 from actions.feasibitlity_evaluating import handle_feasibility_evaluating
 from actions.force_delete import force_delete_undeleted
 from actions.pending_approval import handle_pending_approval
@@ -40,6 +41,12 @@ class Settings:
 class WebhookPayload(BaseModel):
     """Pydantic model for validating Asana webhook payload."""
     events: List[Dict]
+
+
+class UpdateBusinessValueWebhoook(BaseModel):
+    """Pydantic model for validating Business value update webhook payload."""
+    companyName: str
+    businessValue: str | float
 
 # ======================
 # Dependencies
@@ -100,16 +107,51 @@ async def health_check():
     return {"status": "running"}
 
 
-@app.get("/test")
-async def test_endpoint():
+@app.post("/update-company-business-value")
+async def handle_update_company_business_value(request: Request):
     """
-    Temporary testing endpoint.
+    Webhook endpoint to update the Business Value of a company in Asana,
+    triggered from Google Apps Script integrated with Google Sheets.
+    """
+    try:
+        try:
+            payload = UpdateBusinessValueWebhoook.model_validate(await request.json())
+        except ValidationError as ve:
+            logger.warning(f"Invalid payload format: {ve}")
+            return {
+                "status": "error",
+                "message": "Invalid payload format",
+                "detail": str(ve)
+            }
 
-    Note:
-        Remove this in production environments.
-    """
-    append_new_company("New Company")
-    return {"message": "Test completed"}
+        company_name = payload.companyName
+        business_value_raw = payload.businessValue
+
+        try:
+            business_value = float(business_value_raw)
+        except (ValueError, TypeError):
+            return {
+                "status": "error",
+                "message": f"Invalid business value: '{business_value_raw}' is not a number"
+            }
+
+        update_business_value_from_scoring(company_name, business_value)
+
+        return {
+            "status": "success",
+            "data": {
+                "companyName": company_name,
+                "businessValue": business_value
+            }
+        }
+
+    except Exception as e:  # pylint: disable=broad-except
+        logger.exception(f"Webhook processing failed: {e}")
+        return {
+            "status": "error",
+            "message": "Internal server error",
+            "detail": str(e)
+        }
 
 
 @app.post("/asana-webhook")
