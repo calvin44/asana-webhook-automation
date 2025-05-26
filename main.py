@@ -107,13 +107,6 @@ async def health_check():
     """Health check endpoint for service monitoring."""
     return {"status": "running"}
 
-@app.get("/test")
-async def test():
-    append_new_company('Calvin Test Company')
-    """Health check endpoint for service monitoring."""
-    return {"status": "running"}
-
-
 @app.post("/update-company-business-value")
 async def handle_update_company_business_value(request: Request):
     """
