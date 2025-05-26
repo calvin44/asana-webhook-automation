@@ -6,13 +6,14 @@ Includes background task processing for various Asana task states.
 """
 
 from contextlib import asynccontextmanager
-from typing import Dict, List
+from typing import Dict, List, Optional
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, Request, Header, Response, Depends
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 
 from asana_utils.task import group_events_by_task_gid
+from scoring_system.add_new_company import append_new_company
 from utils.resources import ASANA_PAT
 from utils.webhook import check_webhook_exists
 
@@ -106,6 +107,12 @@ async def health_check():
     """Health check endpoint for service monitoring."""
     return {"status": "running"}
 
+@app.get("/test")
+async def test():
+    append_new_company('Calvin Test Company')
+    """Health check endpoint for service monitoring."""
+    return {"status": "running"}
+
 
 @app.post("/update-company-business-value")
 async def handle_update_company_business_value(request: Request):
@@ -158,7 +165,7 @@ async def handle_update_company_business_value(request: Request):
 async def handle_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
-    x_hook_secret: str = Depends(verify_webhook_secret)
+    x_hook_secret: Optional[str] = Header(None),
 ):
     """
     Process incoming Asana webhook events.
@@ -171,9 +178,9 @@ async def handle_webhook(
     Returns:
         dict: Processing status or error message
     """
-    # Webhook handshake
+  # Webhook handshake
     if x_hook_secret:
-        return Response(headers={"X-Hook-Secret": x_hook_secret})
+        return Response(content="", status_code=200, headers={"X-Hook-Secret": x_hook_secret})
 
     try:
         payload = WebhookPayload.model_validate(await request.json())

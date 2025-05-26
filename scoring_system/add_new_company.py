@@ -9,6 +9,7 @@ def append_new_company(company_name: str):
     """
     Add a new company to the scoring system table.
     """
+    logger.debug(f"CompanyName: {company_name}")
     try:
         client = get_sheet_client()
         spreadsheet = client.open("Project Scoring System")
