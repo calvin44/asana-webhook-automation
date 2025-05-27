@@ -177,7 +177,9 @@ async def handle_webhook(
 
     try:
         payload = WebhookPayload.model_validate(await request.json())
+        logger.debug(f"Received Events: {payload}")
         events_by_task = group_events_by_task_gid(payload.events)
+        logger.debug(f"Grouped Tasks: {events_by_task}")
 
         # Process events in background
         background_tasks.add_task(

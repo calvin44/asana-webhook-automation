@@ -15,6 +15,14 @@ def append_new_company(company_name: str):
         spreadsheet = client.open("Project Scoring System")
         sheet = spreadsheet.worksheet("Project Scoring")
 
+        # Check for prior record
+        try:
+            sheet.find(company_name)
+            logger.info(f"Company found on record, abort appending")
+            return
+        except Exception as e:
+            logger.error(f"Could not find company, proceed with appending")
+
         # Locate header cells
         headers = {
             "Project": sheet.find("Project"),
