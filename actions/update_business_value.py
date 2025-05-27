@@ -31,9 +31,11 @@ def update_business_value_from_scoring(company_name: str, business_value: float)
         logger.exception("Failed to fetch task list from project")
         return {"status": "error", "message": "Failed to fetch task list"}
 
-    matched_task: Optional[Dict] = next(
-        (task for task in task_list if task.get("name") == company_name), None
-    )
+    cleaned_company_name = company_name.strip()
+    matched_task = next(
+    (task for task in task_list if task.get("name", "").strip() == cleaned_company_name),
+    None
+)
     if not matched_task:
         logger.warning(f"No task found with name '{company_name}'")
         return {"status": "error", "message": f"No task found for '{company_name}'"}

@@ -136,6 +136,7 @@ async def handle_update_company_business_value(request: Request):
             }
 
         update_business_value_from_scoring(company_name, business_value)
+        logger.info(f"Business value of {company_name} is updated to {business_value}")
 
         return {
             "status": "success",
