@@ -76,7 +76,8 @@ def get_task_info(task_gid: str) -> Optional[Dict]:
         "custom_fields.name",
         "custom_fields.display_value",
         "notes",
-        "name"
+        "name",
+        "parent"
     ]
 
     opts = {"opt_fields": ",".join(fields)}

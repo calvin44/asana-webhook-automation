@@ -16,13 +16,12 @@ def append_new_company(company_name: str):
         sheet = spreadsheet.worksheet("Project Scoring")
 
         # Check for prior record
-        try:
-            sheet.find(company_name)
-            logger.info(f"Company found on record, abort appending")
+        found_company = sheet.col_values(1)
+        if company_name in found_company:
+            logger.info(f"Company name: {company_name} found on Project Scoring, abort appending")
             return
-        except Exception as e:
-            logger.error(f"Could not find company, proceed with appending")
 
+        logger.info(f"Appending company {company_name} to Project Scoring")
         # Locate header cells
         headers = {
             "Project": sheet.find("Project"),

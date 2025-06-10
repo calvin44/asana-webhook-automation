@@ -5,7 +5,7 @@ from scoring_system.add_new_company import append_new_company
 from utils.notify import asana_slack_notification, send_slack_notification
 
 from asana_utils.custom_option import get_task_option
-from asana_utils.event import has_add_event
+from asana_utils.event import has_add_event, is_child_of_project
 from asana_utils.task import (
     delete_task,
     get_task_attachments,
@@ -18,7 +18,6 @@ def handle_requirement_clarifying(events_by_task: Dict[str, List[Dict]]):
     """
     Process task events and delete task if it lacks a description or attachment.
     """
-
     if not events_by_task:
         logger.info("[Handle Requirement Clarifying] ➡️ No events to process.")
         return
@@ -27,10 +26,18 @@ def handle_requirement_clarifying(events_by_task: Dict[str, List[Dict]]):
         if not has_add_event(task_events):
             logger.info(f"Skipping task {task_gid}: No 'add' event.")
             continue
+        
+        logger.debug(f"handling project parent: {task_events}")
 
         logger.info(f"Processing task {task_gid}...")
 
         task_info = get_task_info(task_gid)
+
+        if task_info.get("parent") and task_info["parent"].get("resource_type") == "task":
+            logger.info("This is a subtask, not handled in this scope")
+            continue
+
+        logger.debug(f"queried task info: {task_info}")
         if not task_info:
             logger.error(f"Failed to fetch task info for {task_gid}")
             continue
@@ -63,12 +70,12 @@ def handle_requirement_clarifying(events_by_task: Dict[str, List[Dict]]):
             continue
 
         # Handle invalid task
-        logger.info(f"Task {task_gid} lacks description or attachment. Deleting...")
+        # logger.info(f"Task {task_gid} lacks description or attachment. Deleting...")
 
-        send_slack_notification(":mailbox_with_mail: *Requirement Clarifying* rule started")
+        # send_slack_notification(":mailbox_with_mail: *Requirement Clarifying* rule started")
 
-        update_task(task_gid, {"name": "[Asana Rule Deleted Item]"})
-        logger.info(f"Updated task {task_gid} name to '[Asana Rule Deleted Item]'")
+        # update_task(task_gid, {"name": "[Asana Rule Deleted Item]"})
+        # logger.info(f"Updated task {task_gid} name to '[Asana Rule Deleted Item]'")
 
-        delete_task(task_gid)
-        send_slack_notification(f"🗑️ Task `{task_gid}` was deleted due to lack of information.")
+        # delete_task(task_gid)
+        # send_slack_notification(f"🗑️ Task `{task_gid}` was deleted due to lack of information.")
