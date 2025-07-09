@@ -3,6 +3,7 @@ from gspread import Worksheet
 from gspread.utils import ValueRenderOption, rowcol_to_a1, ValueInputOption
 from loguru import logger
 from scoring_system.g_sheet import get_sheet_client
+from utils.resources import SCORING_DOC_NAME, SCORING_SHEETNAME
 
 
 def append_new_company(company_name: str):
@@ -12,8 +13,8 @@ def append_new_company(company_name: str):
     logger.debug(f"CompanyName: {company_name}")
     try:
         client = get_sheet_client()
-        spreadsheet = client.open("Project Scoring System")
-        sheet = spreadsheet.worksheet("Project Scoring")
+        spreadsheet = client.open(SCORING_DOC_NAME)
+        sheet = spreadsheet.worksheet(SCORING_SHEETNAME)
 
         # Check for prior record
         found_company = sheet.col_values(1)

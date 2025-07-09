@@ -12,6 +12,7 @@ from fastapi import BackgroundTasks, FastAPI, Request, Header, Response, Depends
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 
+from actions.update_project_scoring_status import handle_project_status_updates
 from asana_utils.task import group_events_by_task_gid
 from scoring_system.add_new_company import append_new_company
 from utils.resources import ASANA_PAT
@@ -191,6 +192,9 @@ async def handle_webhook(
             handle_requirement_clarifying, events_by_task["added"])
         background_tasks.add_task(
             force_delete_undeleted, events_by_task["undeleted"])
+        background_tasks.add_task(
+            handle_project_status_updates, events_by_task["changed"]
+        )
 
         return {"status": "processing_started"}
 

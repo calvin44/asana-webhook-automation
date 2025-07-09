@@ -2,15 +2,13 @@ from typing import Dict, List
 from loguru import logger
 
 from scoring_system.add_new_company import append_new_company
-from utils.notify import asana_slack_notification, send_slack_notification
+from utils.notify import asana_slack_notification
 
 from asana_utils.custom_option import get_task_option
-from asana_utils.event import has_add_event, is_child_of_project
+from asana_utils.event import has_add_event
 from asana_utils.task import (
-    delete_task,
     get_task_attachments,
     get_task_info,
-    update_task,
 )
 
 
