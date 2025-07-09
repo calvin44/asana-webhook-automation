@@ -7,7 +7,7 @@ from asana_utils.custom_option import get_task_option
 from asana_utils.event import has_change_event
 from asana_utils.task import get_task_info
 from scoring_system.g_sheet import get_sheet_client
-from utils.notify import asana_slack_notification
+from utils.notify import asana_slack_notification, notify_asana_failure
 from utils.resources import SCORING_DOC_NAME, SCORING_SHEETNAME
 
 
@@ -38,6 +38,8 @@ def handle_project_status_updates(events_by_task: Dict[str, List[Dict]]) -> None
         company_name = task_info.get("name", "").strip()
         if not company_name:
             logger.warning(f"❓ No company name found for task {task_gid}")
+            notify_asana_failure(
+                task_gid, f"{company_name} is not found on Project Scoring Sheet. Update failed!")
             continue
 
         option = get_task_option(task_info)
